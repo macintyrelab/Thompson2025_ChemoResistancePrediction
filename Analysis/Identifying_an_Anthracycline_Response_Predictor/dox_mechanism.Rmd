@@ -1,0 +1,747 @@
+---
+title: "Exploring the mechanism of resistance to doxorubicin"
+output: pdf_document
+editor_options: 
+  chunk_output_type: inline
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+rm(list=ls(all=TRUE))
+
+knitr::opts_chunk$set(collapse = TRUE,comment = "#>")
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+
+## PACKAGES
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(ggpubr)
+
+## DATA DIRECTORY
+BASE<-dirname(rstudioapi::getSourceEditorContext()$path)
+INDIR<-paste0(dirname(dirname(BASE)),"/Input_Data")
+FIGDIR<-paste0(dirname(dirname(BASE)),"/Figures")
+```
+
+# Background
+
+Existing studies show that low doses of doxorubicin can induce
+micronuclei formation in cancer cell lines. Higher doses result in
+catastrophic missegregation errors during mitosis and cell death. We
+therefore hypothesise that cancer cells which have the capacity to
+tolerate micronuclei may not be sensistive to doxorubicin.
+
+Replication of micronuclei often results in high level amplification of
+small regions of the genome. DNA damage induced micronuclei can persist
+across cell divisions (\~75%) or can be reincorporated back into genome
+(25%), rarely is it degraded or excluded (Reimann et al. Arch Toxicol,
+2020). Our copy number signature framework includes three signatures
+associated with high-level copy number changes of small segments (CX8,
+CX9 and CX13). Therefore, we hypothesis that exposure of those
+amplification-related signatures may be used to predict response to
+doxorubicin.
+
+# Hypothesis
+
+Genomic indicators of focal amplification are predictive of resistance
+to doxorubicin in ovarian cancer.
+
+We hypothesized that amplification-related signatures (CX8, CX9 and
+CX13) can be used as biomarkers for doxorubicin response. Doxorubicin
+treatment seems to induce micronuclei and its resistance may be due to
+ability to tolerate micronuclei and/or prevent its formation.
+
+# Exploring our hypothesis
+
+## Data description
+
+Here we treated ovarian cancer cell lines for 48hrs with low doses of
+doxorubicin and compared to a vehicle control. Two subsequent assays
+were run on these data:
+
+1.  Imaging to determine micronuclei counts
+
+2.  Cell viability to look at cell growth.
+
+\newpage
+
+## Cell line description
+
+We profiled 6 ovarian cell lines: CIOV1, CIOV2, CIOV4, CIOV6, OVCAR3,
+PEO23. sWGS and copy number signature analysis shows three of these cell
+lines have significant activity of one of these amplification
+signatures, which we propose is a readout of the current or historical
+presence of micronuclei. A threshold of 0.01 was used to confirm that
+the signature activity was relevant (see section analyzing organoids and
+spheroids for further details on selecting the threshold)
+
+```{r plot_exposures, fig1, fig.height = 3, fig.width = 5, fig.align = "center", eval=TRUE, echo=FALSE}
+exposures<-readRDS(paste0(INDIR,"/4_Activities_CompendiumCINSigs_THRESH95_OV_cells.rds"))
+pdat<-reshape::melt(exposures)
+colnames(pdat)<-c("celltype","signature","activity")
+pdat<-pdat[pdat$celltype%in%c("CIOV1","CIOV2","CIOV4","CIOV6","NIH:OVCAR3","JBLAB-6307_PEO23"),]
+pdat$signature<-factor(pdat$signature,levels=c(paste0("CX",1:17)))
+
+ggplot(pdat[pdat$signature%in%c("CX8","CX9","CX13"),], aes(x=celltype,y=activity,fill=signature))+
+    geom_bar(stat = 'identity',position = position_dodge(0.5),width = 0.4)+
+    geom_hline(yintercept = 0.01, color="black", linetype='dashed') +
+    ggtitle("Activities of amplification signatures")+
+    xlab("Cell lines") + ylab("Signature activities") +
+    theme(plot.title = element_text(size = 10),
+          axis.title = element_text(size = 8),
+          axis.line = element_line(size = 0.5), 
+          axis.ticks = element_line(size = 0.5),
+          axis.ticks.length = unit(.1, "cm"),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size = 6),
+          axis.text.y = element_text(size = 6))
+```
+
+# Experimental system
+
+For testing our hypothesis we need:
+
+-   A dose time long enough to allow most cells to have divided at least
+    once
+-   A dose which does not cause significant cell death but induces
+    micronuclei formation
+
+## Quality control
+
+### 1) Cell viability according to plate design
+
+Firstly, we want to observe if the cell count estimates are stable given
+the plate design, where cells are plated into wells containing different
+concentrations of doxorubicin or a vehicle control. Below are SRB values
+at day 0.
+
+```{r plot_qc0, fig2, fig.height = 5, fig.width = 6, fig.align = "center", eval=TRUE, echo=FALSE}
+# Function
+make_srb_long<-function(raw_srb_data,time){
+  control_cols<-2:4
+  dose0.1_cols<-5:7
+  dose0.5_cols<-8:10
+  dose1_cols<-11:13
+  CIOV2_rows<-1:2
+  CIOV4_rows<-3:4
+  CIOV6_rows<-5:6
+  PEO23_rows<-7:8
+  CIOV1_rows<-9:10
+  OVCAR3_rows<-11:12
+    srb_data_long<-rbind(
+    data.frame(cell_type="OVCAR3",time,rep=1:6,dose=0,value=as.numeric(as.matrix(raw_srb_data[OVCAR3_rows,control_cols]))),
+    data.frame(cell_type="CIOV1",time,rep=1:6,dose=0,value=as.numeric(as.matrix(raw_srb_data[CIOV1_rows,control_cols]))),
+    data.frame(cell_type="PEO23",time,rep=1:6,dose=0,value=as.numeric(as.matrix(raw_srb_data[PEO23_rows,control_cols]))),
+    data.frame(cell_type="CIOV4",time,rep=1:6,dose=0,value=as.numeric(as.matrix(raw_srb_data[CIOV4_rows,control_cols]))),
+    data.frame(cell_type="CIOV6",time,rep=1:6,dose=0,value=as.numeric(as.matrix(raw_srb_data[CIOV6_rows,control_cols]))),
+    data.frame(cell_type="CIOV2",time,rep=1:6,dose=0,value=as.numeric(as.matrix(raw_srb_data[CIOV2_rows,control_cols]))),
+    data.frame(cell_type="OVCAR3",time,rep=1:6,dose=0.1,value=as.numeric(as.matrix(raw_srb_data[OVCAR3_rows,dose0.1_cols]))),
+    data.frame(cell_type="CIOV1",time,rep=1:6,dose=0.1,value=as.numeric(as.matrix(raw_srb_data[CIOV1_rows,dose0.1_cols]))),
+    data.frame(cell_type="PEO23",time,rep=1:6,dose=0.1,value=as.numeric(as.matrix(raw_srb_data[PEO23_rows,dose0.1_cols]))),
+    data.frame(cell_type="CIOV4",time,rep=1:6,dose=0.1,value=as.numeric(as.matrix(raw_srb_data[CIOV4_rows,dose0.1_cols]))),
+    data.frame(cell_type="CIOV6",time,rep=1:6,dose=0.1,value=as.numeric(as.matrix(raw_srb_data[CIOV6_rows,dose0.1_cols]))),
+    data.frame(cell_type="CIOV2",time,rep=1:6,dose=0.1,value=as.numeric(as.matrix(raw_srb_data[CIOV2_rows,dose0.1_cols]))),
+    data.frame(cell_type="OVCAR3",time,rep=1:6,dose=0.5,value=as.numeric(as.matrix(raw_srb_data[OVCAR3_rows,dose0.5_cols]))),
+    data.frame(cell_type="CIOV1",time,rep=1:6,dose=0.5,value=as.numeric(as.matrix(raw_srb_data[CIOV1_rows,dose0.5_cols]))),
+    data.frame(cell_type="PEO23",time,rep=1:6,dose=0.5,value=as.numeric(as.matrix(raw_srb_data[PEO23_rows,dose0.5_cols]))),
+    data.frame(cell_type="CIOV4",time,rep=1:6,dose=0.5,value=as.numeric(as.matrix(raw_srb_data[CIOV4_rows,dose0.5_cols]))),
+    data.frame(cell_type="CIOV6",time,rep=1:6,dose=0.5,value=as.numeric(as.matrix(raw_srb_data[CIOV6_rows,dose0.5_cols]))),
+    data.frame(cell_type="CIOV2",time,rep=1:6,dose=0.5,value=as.numeric(as.matrix(raw_srb_data[CIOV2_rows,dose0.5_cols]))),
+    data.frame(cell_type="OVCAR3",time,rep=1:6,dose=1,value=as.numeric(as.matrix(raw_srb_data[OVCAR3_rows,dose1_cols]))),
+    data.frame(cell_type="CIOV1",time,rep=1:6,dose=1,value=as.numeric(as.matrix(raw_srb_data[CIOV1_rows,dose1_cols]))),
+    data.frame(cell_type="PEO23",time,rep=1:6,dose=1,value=as.numeric(as.matrix(raw_srb_data[PEO23_rows,dose1_cols]))),
+    data.frame(cell_type="CIOV4",time,rep=1:6,dose=1,value=as.numeric(as.matrix(raw_srb_data[CIOV4_rows,dose1_cols]))),
+    data.frame(cell_type="CIOV6",time,rep=1:6,dose=1,value=as.numeric(as.matrix(raw_srb_data[CIOV6_rows,dose1_cols]))),
+    data.frame(cell_type="CIOV2",time,rep=1:6,dose=1,value=as.numeric(as.matrix(raw_srb_data[CIOV2_rows,dose1_cols])))
+  )
+  srb_data_long
+}
+
+# Load data
+plate1<-read_excel(paste0(INDIR,"/day0_fourCellLines.xlsx"),skip=13)
+plate2<-read_excel(paste0(INDIR,"/day0_CIOV1_OVCAR3.xlsx"),skip=13)
+
+raw_srb_data<-rbind(plate1[,1:13],plate2[1:4,1:13])
+srb_data_long<-make_srb_long(raw_srb_data,0)
+
+# Plot
+ggplot(srb_data_long,aes(x=factor(dose),y=value))+geom_boxplot()+facet_wrap(cell_type ~ .)+geom_jitter()+
+  geom_signif(test="t.test",comparisons = list(c(1,2)),textsize=3)+coord_cartesian(y=c(0.05,0.15))+
+  xlab("Doxorubicin dose") + ylab("SRB values") +
+  theme(plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.line = element_line(size = 0.5), 
+        axis.ticks = element_line(size = 0.5),
+        axis.ticks.length = unit(.1, "cm"),
+        axis.text.x = element_text(size = 6),
+        axis.text.y = element_text(size = 6))
+```
+
+OVCAR3 is the only cell type which shows a significant difference in
+counts between vehicle and 0.1uM concentration. However, the effect size
+is low so we will retain it for further analysis.
+
+### 2) Changes in cell viability under doxorubicin treatment
+
+Then, we explore cell viability after being exposed to doxorubicin. This
+experiment is to decide the dose of doxorucbicin for testing our
+hypothesis. We need a concentration that does not impact on cell growth
+but induce micronuclei formation.
+
+```{r plot_growth, fig3, fig.height = 4, fig.width = 8, fig.align = "center", eval=TRUE, echo=FALSE}
+# Load data at day 1
+plate1<-read_excel(paste0(INDIR,"/day1_fourCellLines.xlsx"),skip=14)
+plate2<-read_excel(paste0(INDIR,"/day1_CIOV1_OVCAR3.xlsx"),skip=13)
+raw_srb_data_day1<-rbind(plate1[,1:13],plate2[1:4,1:13])
+srb_data_long_day1<-make_srb_long(raw_srb_data_day1,1)
+
+# Load data at day 5
+plate1<-read_excel(paste0(INDIR,"/day5_fourCellLines.xlsx"),skip=14)
+plate2<-read_excel(paste0(INDIR,"/day5_CIOV1_OVCAR3.xlsx"),skip=13)
+raw_srb_data_day5<-rbind(plate1[,1:13],plate2[1:4,1:13])
+srb_data_long_day5<-make_srb_long(raw_srb_data_day5,5)
+
+# Plot scatter plot to see growth rates
+srb_data_long<-rbind(srb_data_long,srb_data_long_day1,srb_data_long_day5)
+ggplot(srb_data_long,aes(x=time,y=value,colour=factor(dose)))+geom_point(size=1)+stat_smooth()+facet_grid(~cell_type)+
+  xlab("Time of exposure (days)") + ylab("SRB values") +
+  theme(plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.line = element_line(size = 0.5), 
+        axis.ticks = element_line(size = 0.5),
+        axis.ticks.length = unit(.1, "cm"),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(0.3, "cm"),
+        axis.text.x = element_text(size = 6),
+        axis.text.y = element_text(size = 6)) +
+  scale_color_manual("Dox dose (uM)", values=c("0" = "#1B9E77", "0.1" = "#D95F02", "0.5" ="#7570B3", "1" = "#E7298A"))
+
+```
+
+The above plots indicate that 0.1uM is a very high dose for testing our
+hypothesis since it impacts on cell growth (SRB values decay after being
+one day exposed to 0.1 of doxorubicin). Therefore, we need lower doses
+of doxorubicin in order to have a similar growth rates than control
+conditions.
+
+We then performed growth analyses exposing cells to 0.025 and 0.05 of
+doxorubicin in culture.
+
+```{r plot_growth_low, fig4, fig.height = 4, fig.width = 8, fig.align = "center", eval=TRUE, echo=FALSE}
+# Function
+make_incucyte_long<-function(raw_incucyte_data,time,time_row){
+  control_cols<-1:3
+  dose0.025_cols<-4:6
+  dose0.05_cols<-7:9
+  dose1_cols<-10:12
+  CIOV2_lab<-"B"
+  CIOV4_lab<-"D"
+  CIOV6_lab<-"E"
+  PEO23_lab<-"G"
+  CIOV1_lab<-"A"
+  OVCAR3_lab<-"F"
+  
+  d1<-do.call("rbind",mapply(function(x,y,z){
+    data.frame(cell_type=x,time,rep=1:3,dose=0,
+               value=as.numeric(as.matrix(raw_incucyte_data[time_row,paste0(y,control_cols)])))},
+    c("OVCAR3","CIOV2","PEO23","CIOV4","CIOV6","CIOV1"),
+    c(OVCAR3_lab,CIOV2_lab,PEO23_lab,CIOV4_lab,CIOV6_lab,CIOV1_lab),
+    SIMPLIFY = F))
+  
+  d2<-do.call("rbind",mapply(function(x,y,z){
+    data.frame(cell_type=x,time,rep=1:3,dose=0.025,
+               value=as.numeric(as.matrix(raw_incucyte_data[time_row,paste0(y,dose0.025_cols)])))},
+    c("OVCAR3","CIOV2","PEO23","CIOV4","CIOV6","CIOV1"),
+    c(OVCAR3_lab,CIOV2_lab,PEO23_lab,CIOV4_lab,CIOV6_lab,CIOV1_lab),
+    SIMPLIFY = F))
+  
+  d3<-do.call("rbind",mapply(function(x,y,z){
+    data.frame(cell_type=x,time,rep=1:3,dose=0.05,
+               value=as.numeric(as.matrix(raw_incucyte_data[time_row,paste0(y,dose0.05_cols)])))},
+    c("OVCAR3","CIOV2","PEO23","CIOV4","CIOV6","CIOV1"),
+    c(OVCAR3_lab,CIOV2_lab,PEO23_lab,CIOV4_lab,CIOV6_lab,CIOV1_lab),
+    SIMPLIFY = F))
+  
+  d4<-do.call("rbind",mapply(function(x,y,z){
+    data.frame(cell_type=x,time,rep=1:3,dose=0.1,
+               value=as.numeric(as.matrix(raw_incucyte_data[time_row,paste0(y,dose1_cols)])))},
+    c("OVCAR3","CIOV2","PEO23","CIOV4","CIOV6","CIOV1"),
+    c(OVCAR3_lab,CIOV2_lab,PEO23_lab,CIOV4_lab,CIOV6_lab,CIOV1_lab),
+    SIMPLIFY = F))
+  
+    rbind(d1,d2,d3,d4)
+}
+
+# Load data
+plate1<-read.csv(paste0(INDIR,"/2019.12.11_lowDoseDoxo.txt"),skip=7,sep="\t")
+
+incucyte_data_long<-c()
+t<-0
+for(i in 1:49){
+  incucyte_data_long<-rbind(incucyte_data_long,make_incucyte_long(plate1,t,i))
+  t<-t+3
+}
+
+# Plot
+ggplot(incucyte_data_long,aes(x=time,y=value,colour=factor(dose)))+geom_point()+stat_smooth()+facet_grid(~cell_type)+
+  geom_vline(xintercept=120)+coord_cartesian(x=c(0,48))+
+  xlab("Time of exposure (hours)") + ylab("SRB values") +
+  theme(plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.line = element_line(size = 0.5), 
+        axis.ticks = element_line(size = 0.5),
+        axis.ticks.length = unit(.1, "cm"),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 6),
+        legend.key.size = unit(0.3, "cm"),
+        axis.text.x = element_text(size = 6),
+        axis.text.y = element_text(size = 6)) +
+  scale_color_manual("Dox dose (uM)", values=c("0" = "#1B9E77", "0.025" = "#377EB8", "0.05" = "#E6AB02", "0.1" = "#D95F02"))
+```
+
+The above plot shows cell growth for all cell lines over a 48hr period
+under all conditions. CIOV1 and CIOV3 show 100% confluence after 48hrs.
+CIOV6 also show confluence after 48hrs when is exposed to low doses of
+doxorubicin. All these three cell lines are therefore removed from
+further analysis due to signal saturation.
+
+\newpage
+
+Next we look at how each cell line's growth rate changes with
+doxorubicin treatment over 48hrs. The idea is to select a dose that does
+not impact on cell growth rates compared to control conditions.
+
+```{r plot_growth_low_dox, fig5, fig.height = 4, fig.width = 8, fig.align = "center", eval=TRUE, echo=FALSE}
+# Remove cells
+incucyte_data_long_mod<-incucyte_data_long[!incucyte_data_long$cell_type%in%c("CIOV1","CIOV6"),]
+
+# Plot
+ggplot(incucyte_data_long_mod[incucyte_data_long_mod$time==48,],aes(x=factor(dose),y=value))+geom_boxplot()+geom_jitter()+facet_grid(~cell_type)+
+  geom_signif(test="t.test",comparisons = list(c(1,2),c(1,3),c(1,4)),textsize=3, step_increase = 0.1)+
+  xlab("Doxorubicin dose") + ylab("SRB values") +
+  theme(plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.line = element_line(size = 0.5), 
+        axis.ticks = element_line(size = 0.5),
+        axis.ticks.length = unit(.1, "cm"),
+        axis.text.x = element_text(size = 6),
+        axis.text.y = element_text(size = 6))
+```
+
+OVCAR3, PEO23 and CIOV4 show stable growth rates in the presence of all
+concentrations of doxorubicin suggesting that the concentration is low
+enough not to cause significant cell death or impede cell growth. CIOV2
+show stable growth rates when we use a concentration lower than 0.1uM.
+
+For that reason, [a doxorubicin dose of 0.025uM has been selected for
+exploring our hypothesis]{.ul}. Micronuclei analyses has been done using
+[OVCAR3, PEO23, CIOV2 and CIOV4 cell lines]{.ul}.
+
+### 3) Fraction of dividing cells in culture
+
+Using incubation data, we then estimate the percentage of cells that
+have divided after being exposed 48hrs to 0 and 0.025uM of doxorubicin.
+The fraction of dividing cells is needed for estimating the fraction of
+cells with micronuclei at baseline and after being exposed to
+doxorubicin. Our hypothesis is that those cells with signature 6 will
+have less fraction of cells with micronuclei than expected as a
+mechanism of resistance.
+
+```{r, eval=TRUE, echo=FALSE}
+# Estimate fraction of dividing cells in control conditions
+frac_dividing<-c()
+for(c in unique(incucyte_data_long$cell_type))
+{
+  dat<-incucyte_data_long[incucyte_data_long$cell_type==c&incucyte_data_long$dose==0&incucyte_data_long$time<=48,]
+  fit<-lm(log(value)~time,dat)
+  t<-48
+  N0<-exp(predict(fit,newdata=data.frame(time=0)))
+  Nt<-exp(predict(fit,newdata=data.frame(time=t)))
+  f<-log(Nt/N0)/(t*log(2))
+  frac_dividing<-rbind(frac_dividing,c(c,48*f,0))
+}
+
+# Estimate fraction of dividing cells under dox treatment
+for(c in unique(incucyte_data_long$cell_type))
+{
+  dat<-incucyte_data_long[incucyte_data_long$cell_type==c&incucyte_data_long$dose==0.025&incucyte_data_long$time<=48,]
+  fit<-lm(log(value)~time,dat)
+  t<-48
+  N0<-exp(predict(fit,newdata=data.frame(time=0)))
+  Nt<-exp(predict(fit,newdata=data.frame(time=t)))
+  f<-log(Nt/N0)/(t*log(2))
+  frac_dividing<-rbind(frac_dividing,c(c,48*f,0.025))
+}
+frac_dividing=data.frame(frac_dividing,stringsAsFactors = F)
+colnames(frac_dividing)=c("Cell.Type","frac_dividing","Concentration")
+frac_dividing$frac_dividing=as.numeric(frac_dividing$frac_dividing)
+knitr::kable(frac_dividing, caption = "% cells divided at 48hrs")
+```
+
+\newpage
+
+## Testing our hypothesis
+
+CIOV2, CIOV4 and OVCAR3 show evidence of the presence of micronuclei at
+some stage in their evolutionary history which we assume to haven been
+fixed in the population via reintegration into the genome.
+
+Next we want to explore how these cells respond in terms of induction of
+micronuclei and whether the presence of amplification signatures encodes
+differential response.
+
+### 1) Observed fraction of micronuclei in cell lines
+
+First, we compute the fraction of cells with micronuclei in cell lines
+after being exposed to doxorubicin. Micronuclei counts were estimated
+using imaging (description provided by Carolin). Counts are then used to
+compute the fraction of cells with micronuclei by taking into account
+the number of mitotic cells which have doubled their genetic material.
+Here, we used PHH3 score as a marker for cells undergoing mitosis. Cells
+undergoing mitosis
+
+```{r plot_freqMN, fig6, fig.height = 3, fig.width = 6, fig.align = "center", eval=TRUE, echo=FALSE}
+# Load data
+MNcount<-readRDS(paste0(INDIR,"/MNcounts_ValidCells.rds"))
+mitotic_counts<-readRDS(paste0(INDIR,"/PHH3_positive.rds")) #PHH3 is a biomarker for mitosis
+
+# Process data
+pdat<-MNcount %>% group_by(Cell.Type,Concentration,Row,Column) %>% summarise(n = n(),mn=sum(Valid.Cells...Valid.with.MN))# %>% mutate(freq = mn / n)
+pdat2<-mitotic_counts %>% group_by(Cell.Type,Concentration,Row,Column) %>% summarise(mitotic = n())
+pdat<-left_join(pdat,pdat2)
+pdat<-pdat %>% mutate(corrected_freq=mn/(n+mitotic)) #divided by the total number plus the number of mitotic cells because they have doubled their genetic material and should be counted two times
+pdat$Cell.Type<-factor(pdat$Cell.Type,levels=rev(c("OVCAR3","CIOV2","PEO23","CIOV4","CIOV6","CIOV1")))
+
+# Limit the analyses to cell lines selected after quality control
+cells=c("OVCAR3","CIOV2","PEO23","CIOV4")
+pdat=pdat[pdat$Cell.Type%in%cells,]
+
+# Plot
+ggplot(pdat,aes(x=factor(Concentration),y=corrected_freq))+geom_boxplot()+geom_jitter()+coord_cartesian(y=c(0,0.75))+
+  facet_grid(.~Cell.Type)+geom_signif(test="t.test",comparisons = list(c(1,2),c(1,3),c(1,4)),textsize=3, step_increase = 0.2)+
+  xlab("Doxorubicin dose (uM)") + ylab("fraction of cells with micronuclei\n(PHH3 positive as marker for mitotic cells)") +
+  theme(plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.line = element_line(size = 0.5), 
+        axis.ticks = element_line(size = 0.5),
+        axis.ticks.length = unit(.1, "cm"),
+        axis.text.x = element_text(size = 6),
+        axis.text.y = element_text(size = 6))
+```
+
+Across all cell lines we see an induction of the fraction of cells
+containing micronuclei with low dose dox treatment. However, this effect
+is abrogated with higher doses of dox in PEO23 and OVCAR3.
+
+### 2) Estimated fraction of cells with micronuclei
+
+To perform statistical analyses, we then estimate the expected fraction
+of cells with micronuclei which may depend on the fraction of dividing
+cells.
+
+Model for estimating the number of micronucleated cells is based on this
+study: <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7502055/>.
+
+In this study, they observed micronucleus-containing cells in time-lapse
+imaging and found an increase in the number of micronuclei per cell
+after the first division. This means that some cells contained more than
+one micronuclei so (ideally) each daughter cell contains at least one
+micronuclei. However they found a decrease of micronuclei per cell in
+the following generations indicating that some cells lost or reintegrate
+their micronuclei (persistence occurs in 75% of cases).
+
+Another key point for estimating/assessing micronuclei is cell
+viability. Micronuclei in no-dividing cells persists over time and
+generations (1st term of the model equation). For modeling dividing
+cells, the number of micronucleated cells is expected to be reduced to
+50% with each cell division whether the micronucleus persists in one
+daughter cell (which occurs in 75% of cases) and the other daughter cell
+does not contain a micronucleus (2nd term of the equation in the
+non-first division function). In the first division (where there is not
+degradation, reincorporation or extrusion of micronuclei), the rate of
+cells uptaking doxorubicin (and therefore being damaged by the drug) is
+estimated to be \~60% (Chondrou et al., 2018). In control conditions,
+the rate of cells accumulating damage is \~30%. Thus, the micronuclei
+formation will be only induced in this fraction of cells.
+
+```{r plot_est_freqMN, fig7, fig.height = 3, fig.width = 6, fig.align = "center", eval=TRUE, echo=FALSE}
+# Functions
+compute_exp_mn_first_division<-function(f,MN0,d)
+{
+  MNt<-(1-f)*MN0 + d*f*(MN0*0.5+MN0+(1-MN0)/2)
+  MNt
+}
+
+adjust_exp_mn_subsequent_divisions<-function(f,MNt,MN0)
+{
+  MNt<-(1-f)*MNt + 0.75*f*MNt/2 #it is missing background prop of MN formation
+  MNt
+}
+
+# Micronuclei at time=0
+all_MN0<- pdat %>% filter(Concentration==0) %>% group_by(Cell.Type) %>% summarise(MN0=mean(corrected_freq))
+
+# Compute expected number of cells with micronuclei with subsequent divisions 
+# In control conditions
+all_exp0<-c()
+for(c in unique(all_MN0$Cell.Type))
+{
+  f<-as.numeric(frac_dividing$frac_dividing[frac_dividing$Cell.Type==c & frac_dividing$Concentration==0])
+  MN0<-all_MN0[all_MN0$Cell.Type==c,"MN0"]
+  d<-0.25 #damage caused by culture
+  if(f>1)
+  {
+    MNt<-compute_exp_mn_first_division(1,MN0,d)
+    while(f>1)
+    {
+      f<-f-1
+      MNt<-adjust_exp_mn_subsequent_divisions(f,MNt,MN0)
+    }
+  }else{
+    MNt<-compute_exp_mn_first_division(f,MN0,d)
+  }
+  all_exp0<-rbind(all_exp0,cbind(c,MNt))
+}
+all_exp0<-data.frame(all_exp0,stringsAsFactors = F)
+colnames(all_exp0)<-c("Cell.Type","MNt")
+all_exp0$Concentration<-0
+
+# Under dox treatment
+all_expD<-c()
+for(c in unique(all_MN0$Cell.Type))
+{
+  f<-as.numeric(frac_dividing$frac_dividing[frac_dividing$Cell.Type==c & frac_dividing$Concentration!=0])
+  MN0<-all_MN0[all_MN0$Cell.Type==c,"MN0"]
+  d<-0.6 #fraction of cells damaged
+  if(f>1)
+  {
+    MNt<-compute_exp_mn_first_division(1,MN0,d)
+    while(f>1)
+    {
+      f<-f-1
+      MNt<-adjust_exp_mn_subsequent_divisions(f,MNt,MN0)
+    }
+  }else{
+    MNt<-compute_exp_mn_first_division(f,MN0,d)
+  }
+  all_expD<-rbind(all_expD,cbind(c,MNt))
+}
+all_expD<-data.frame(all_expD,stringsAsFactors = F)
+colnames(all_expD)<-c("Cell.Type","MNt")
+all_expD$Concentration<-0.025
+all_exp=rbind(all_exp0,all_expD)
+
+# Plot
+df=pdat[!pdat$Cell.Type%in%c("CIOV1","CIOV6")&pdat$Concentration%in%c(0,0.025),]
+df=left_join(df,all_exp,by=c("Cell.Type","Concentration"))
+             
+p=ggplot(df,aes(x=factor(Concentration),y=corrected_freq))+
+  geom_boxplot(lwd=0.5,colour="grey30")+geom_jitter(size=1)+coord_cartesian(y=c(0,0.6))+
+  facet_grid(.~Cell.Type)+
+  # geom_hline(data=all_exp,aes(yintercept=MNt))+
+  geom_crossbar(aes(y = MNt, ymin = MNt, ymax = MNt), width = 0.6, colour = "red") +
+  theme_bw() +
+  labs(title = "Ovarian cell lines") +
+  xlab("Doxorubicin dose") + ylab("corrected % of cells with micronuclei") +
+  theme(plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.line = element_line(size = 0.5), 
+        axis.ticks = element_line(size = 0.5),
+        axis.ticks.length = unit(.1, "cm"),
+        axis.text.x = element_text(size = 6),
+        axis.text.y = element_text(size = 6),
+        strip.text.x = element_text(size = 8))
+print(p)
+ggsave(paste0(FIGDIR,"/Supplementary/CellLines_Micronuclei.svg"), p, width = 90, height = 68, units = "mm")
+
+```
+
+As can be seen from the plot above, cell lines with amplification
+signatures (CIOV2, CIOV4 and OVCAR3) showed fewer than expected
+micronuclei suggesting suppression of micronuclei formation, whereas the
+cell line with no activity of amplification signatures (PEO23) showed
+the expected number of micronuclei.
+
+## Confirming our hypothesis
+
+### Exploring intrinsic activation of immune response pathways
+
+Micronuclei induced by doxorubicin can rupture and elicit an immune
+response. The activation of the immune system plays a crucial role in
+the success of anthracycline treatments. Therefore, if a tumour can
+suppress micronuclei formation, it may be able to avoid the subsequent
+immune response and resist treatment.
+
+The ideal will be to explore transcriptomic data of organoids, which is
+publicly available in [Vias et al., eLife.
+2023](https://elifesciences.org/articles/83867#content). However,
+transcriptomic data is only available for 1 out of 2 organoids sensitive
+to doxorubicin. That impeded us to perform this comparison analysis.
+
+#### Differential expression analyses
+
+I first get the expression data from TCGA-OV samples by running the
+`transcriptomic_tcga_data.R` script in the cluster.
+
+```{r}
+### PROCESS TRANSCIPTOMIC DATA
+library(SummarizedExperiment)
+
+## Load expression data of TCGA-OV patients & prepare input matrix
+TCGA_OV_expression=readRDS(file=paste0(INDIR,"/TCGA.OV_RNAseq.rds"))
+meta=as.data.frame(colData(TCGA_OV_expression))
+matrix=as.data.frame(assay(TCGA_OV_expression))
+
+#genes
+genes=as.data.frame(rowRanges(TCGA_OV_expression))
+genes=genes[!duplicated(genes$gene_name),] #only one transcript per gene
+matrix=matrix[row.names(matrix)%in%row.names(genes),]
+row.names(matrix)=genes$gene_name
+
+#remove rows with all zeros
+matrix=matrix[rowSums(matrix)!=0,]
+
+#patients
+colnames(matrix)=substr(colnames(matrix),1,12)
+matrix=matrix[,!duplicated(colnames(matrix))]
+
+#read the annotations
+TCGA.OV_dox<-readRDS(paste0(INDIR,"/TCGA.OV_DoxClassifier.rds"))
+TCGA.OV_dox=TCGA.OV_dox[TCGA.OV_dox$bcr_patient_barcode%in%colnames(matrix),]
+TCGA.OV_dox=TCGA.OV_dox[order(TCGA.OV_dox$dox_prediction), ]
+TCGA.OV_dox$dox_prediction=factor(TCGA.OV_dox$dox_prediction,levels=c("Resistant","Sensitive"))
+
+#order matrix
+matrix=matrix[,TCGA.OV_dox$bcr_patient_barcode]
+```
+
+Once we have the transcriptomic data ready, we performed a diferential
+expression analysis between the TCGA-OV patients predicted as resistant
+and sensitive to doxorubicin
+
+```{r}
+library(org.Hs.eg.db)
+library(DESeq2)
+
+# create DESeq object
+dds <- DESeqDataSetFromMatrix(countData = matrix, 
+                              colData = TCGA.OV_dox, 
+                              design = ~dox_prediction)
+# filter out low expressed genes
+dds <- dds[rowSums(counts(dds)) >= 10,]
+
+# apply DESeq fitting & transformation
+dds <- DESeq(object = dds)
+
+# get results of differential expression analysis
+DE.res <- results(dds, alpha=0.05)
+DE.res$row <- rownames(DE.res)
+DE.res <- DE.res[!is.na(DE.res$pvalue)&!is.na(DE.res$padj),]
+DE.sig <- DE.res[DE.res$padj<0.05,]
+
+# Map Ensembl gene IDs to the symbol. First, create a mapping table.
+ens2symbol <- AnnotationDbi::select(org.Hs.eg.db,
+                                    key=DE.sig$row, 
+                                    columns="ENSEMBL",
+                                    keytype="SYMBOL")
+names(ens2symbol)[1] <- "row"
+ens2symbol <- as_tibble(ens2symbol)
+DE.sig <- merge(data.frame(DE.sig), ens2symbol, by=c("row"))
+
+# order genes from the most statistically significant upregulated to the most statistically significant downregulated
+DE.sig <- DE.sig[!is.na(DE.sig$ENSEMBL),]
+DE.sig <- DE.sig %>% mutate(rank = -log10(padj) * sign(log2FoldChange)) %>% # add rank
+   arrange(desc(rank))
+colnames(DE.sig)[1]="gene"
+```
+
+Finally, we performed a gsea analysis.
+
+```{r plot_expression, fig10, fig.height = 4, fig.width = 6, fig.align = "center", eval=TRUE, echo=FALSE}
+library(fgsea)
+
+## Load gene sets & prepare input for fgsea
+pathways.hallmark <- gmtPathways(paste0(INDIR,"/h.all.v7.1.symbols.gmt"))
+
+## Hallmarks
+gene_sets=t(read.delim(paste0(INDIR,"/h.all.v7.1.symbols.gmt"),header=F,sep="\t"))
+colnames(gene_sets)=gene_sets[1,]
+gene_sets=gene_sets[c(-1,-2),]
+gene_sets=as.data.frame(as.table(gene_sets))[,2:3]
+colnames(gene_sets)=c("pathway","gene")
+
+# create a rank vector
+DE.sig.ready=DE.sig[DE.sig$gene%in%gene_sets$gene,]
+ranked_genes=DE.sig.ready$stat
+names(ranked_genes)=DE.sig.ready$gene
+
+# Running fgsea algorithm:
+set.seed(7777)
+GSEA=fgsea(pathways.hallmark, ranked_genes, minSize  = 15, maxSize  = 500, eps = 0.0, nPermSimple = 10000)
+GSEA=GSEA[GSEA$padj<0.05,]
+GSEA=GSEA[order(GSEA$NES),]
+GSEA$pathway=factor(GSEA$pathway,levels=unique(GSEA$pathway))
+
+p=ggplot(GSEA, aes(x=pathway, y=NES, fill=NES)) + 
+  geom_bar(stat="identity") + 
+	ylab(paste0("NES")) + 
+	xlab("pathway") + 
+	coord_flip() + 
+  theme_bw() +
+  scale_fill_gradient2(low='red', mid='snow3', high='darkgreen', space='Lab') +
+	theme(axis.text=element_text(size=6), 
+	      axis.title=element_text(size=8),
+	      legend.text=element_text(size=6),
+	      legend.title=element_text(size=8))
+print(p)
+
+ggsave(paste0(FIGDIR,"/Supplementary/SuppNoteFig1_GSEA_TCGA-OV.svg"), p, width = 120, height = 45, units = "mm")
+```
+
+```{r plot_enrichment, fig11, fig.height = 8, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE}
+
+p1 = plotEnrichment(pathways.hallmark[["HALLMARK_INFLAMMATORY_RESPONSE"]],
+               ranked_genes) + labs(title="HALLMARK_INFLAMMATORY_RESPONSE")
+ 
+p2 = plotEnrichment(pathways.hallmark[["HALLMARK_INTERFERON_GAMMA_RESPONSE"]],
+               ranked_genes) + labs(title="HALLMARK_INTERFERON_GAMMA_RESPONSE")
+
+p3 = plotEnrichment(pathways.hallmark[["HALLMARK_TNFA_SIGNALING_VIA_NFKB"]],
+               ranked_genes) + labs(title="HALLMARK_TNFA_SIGNALING_VIA_NFKB")
+
+p=ggarrange(p1, p2, p3,
+            labels = c("A", "B", "C"),
+            ncol = 1, nrow = 3)
+
+print(p)
+# ggsave(paste0(FIGDIR,"/Supplementary/SuppFigX_DE_TCGA-OV.svg"), p, width = 100, height = 150, units = "mm")
+```
+
+## Developing & optimizing the clinical biomarker using in vitro models
+
+We treated 10 ovarian cancer organoids and spheroids from 15 patient's
+ascitic fluid with doxorubicin, measured response via IC50 and observed
+activity of amplification signatures. Results indicated that
+CX8/CX9/CX13 were predictive of doxorubicin treatment response in vitro.
+
+These in vitro models were derived predominantly from platinum resistant
+patients. Currently within the NHS, all patients that will respond to doxorubicin
+receive the drug. Therefore, the test needs to ensure all sensitive
+patients continue to receive the drug, while identifying those which are
+resistant. This equates to identifying 100% of the true negatives, or
+100% specificity. To ensure we achieve 100% specificity, we need to
+determine the threshold classify samples correctly.
+
+The exploratory analysis for setting the optimal threshold is in the
+`dox_optimal_threshold.R` script. The optimal threshold for classifying
+samples as resistant is having CX8/CX9/CX13 activity lower than 0.01. We
+validated this threshold by applying it to classify OV04 samples.
+
+This analysis also supported our hypothesis: cancer models and tumour
+samples with activity of amplification-related signatures (CX8, CX9 and
+CX13) are able to tolerate the micronuclei induced by doxorubicin
+treatment and therefore are resistant to this treatment.
