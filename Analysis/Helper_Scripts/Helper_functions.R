@@ -888,7 +888,7 @@ predict_chemo_resistance <- function(in_df, chemo, cohort){
   tcga_sigs <- as.data.frame(readRDS(file.path(input_dir, '4_Activities_CompendiumCINSigs_THRESH95_TCGA.rds')))
   tcga_sigs$bcr_patient_barcode <- rownames(tcga_sigs)
   if(cohort=='hmf'){
-    hmf_sigs <- as.data.frame(readRDS(file.path(input_dir, '4_Activities_CompendiumCINSigs_THRESH95_HMF.rds')))
+    hmf_sigs <- as.data.frame(readRDS(file.path(input_dir, '4_Activities_CompendiumCINSigs_THRESH95_HMF.rds'))) #need to be computed from copy number profiles => use the script in /Analysis/Helper_Scripts/signature_quantification.R
     hmf_sigs$sample <- rownames(hmf_sigs)
     hmf_sigs$patientIdentifier <- gsub('TI*V*$', '', hmf_sigs$sample, perl=TRUE)
     sigs_to_predict <- hmf_sigs %>%
@@ -915,7 +915,7 @@ predict_chemo_resistance <- function(in_df, chemo, cohort){
     if(cohort=='hmf'){
       sigs_to_predict <- sigs_to_predict %>%
         select(sampleId=sample, sCX2, sCX3, prediction)
-      nocin_samps <- readRDS(file.path(input_dir, 'hmf_all_segs_nocin_samps.rds'))
+      nocin_samps <- readRDS(file.path(input_dir, 'hmf_all_segs_nocin_samps.rds')) #download copy number profiles from HMF & apply dCIN threshold
       nocin_samps <- unique(nocin_samps$sample[nocin_samps$sample %in% in_df$sampleId])
       if(length(nocin_samps)>0){
         nocin_sigs <- as.data.frame(cbind(nocin_samps, NA, NA, 'Resistant'))
@@ -945,7 +945,7 @@ predict_chemo_resistance <- function(in_df, chemo, cohort){
     if(cohort=='hmf'){
       sigs_to_predict <- sigs_to_predict %>%
         select(sampleId=sample, CX3, CX5, sCX3, sCX5, prediction)
-      nocin_samps <- readRDS(file.path(input_dir, 'hmf_all_segs_nocin_samps.rds'))
+      nocin_samps <- readRDS(file.path(input_dir, 'hmf_all_segs_nocin_samps.rds')) #download copy number profiles from HMF & apply dCIN threshold
       nocin_samps <- unique(nocin_samps$sample[nocin_samps$sample %in% in_df$sampleId])
       if(length(nocin_samps)>0){
         nocin_sigs <- as.data.frame(cbind(nocin_samps, NA, NA, NA, NA, 'Resistant'))
@@ -971,7 +971,7 @@ predict_chemo_resistance <- function(in_df, chemo, cohort){
     if(cohort=='hmf'){
       sigs_to_predict <- sigs_to_predict %>%
         select(sampleId=sample, CX8, CX9, CX13, prediction)
-      nocin_samps <- readRDS(file.path(input_dir, 'hmf_all_segs_nocin_samps.rds'))
+      nocin_samps <- readRDS(file.path(input_dir, 'hmf_all_segs_nocin_samps.rds')) #download copy number profiles from HMF & apply dCIN threshold
       nocin_samps <- unique(nocin_samps$sample[nocin_samps$sample %in% in_df$sampleId])
       if(length(nocin_samps)>0){
         nocin_sigs <- as.data.frame(cbind(nocin_samps, NA, NA, NA, 'Sensitive'))
@@ -1220,8 +1220,8 @@ exclude_ttf_long_followup <- function(in_df, cohort){
 
 phase_3_func <- function(cancer, chemo, cohort, SA_exp=TRUE, SA_control=FALSE, control_pattern=NULL){
   if(cohort=="hmf"){
-    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS'))
-    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'),
+    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS')) #output of "Curating_HMF_Clinical_Data.R"
+    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'), #download from HMF
                            delim = "\t",
                            escape_double = FALSE,
                            trim_ws = TRUE)
@@ -1350,8 +1350,8 @@ phase_3_func <- function(cancer, chemo, cohort, SA_exp=TRUE, SA_control=FALSE, c
 
 phase_2_func <- function(cancer, chemo, cohort, SA_exp=FALSE){
   if(cohort=="hmf"){
-    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS'))
-    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'),
+    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS')) #output of "Curating_HMF_Clinical_Data.R"
+    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'), #downloaded from HMF
                            delim = "\t",
                            escape_double = FALSE,
                            trim_ws = TRUE)
@@ -1581,8 +1581,8 @@ phase_3_plot_func <- function(cancer, chemo, cohort, SA_exp=TRUE, SA_control=FAL
     str_type <- FALSE
   }
   if(cohort=="hmf"){
-    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS'))
-    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'),
+    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS')) #output of "Curating_HMF_Clinical_Data.R"
+    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'), #downloaded from HMF
                            delim = "\t",
                            escape_double = FALSE,
                            trim_ws = TRUE)
@@ -1832,8 +1832,8 @@ phase_2_plot_func <- function(cancer, chemo, cohort){
     str_type <- FALSE
   }
   if(cohort=="hmf"){
-    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS'))
-    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'),
+    hmf_clin <- readRDS(file.path(input_dir, 'HMF_clinical_data.RDS')) #output of "Curating_HMF_Clinical_Data.R"
+    metadata <- read_delim(file.path(input_dir, 'metadata.tsv'), #downloaded from HMF
                            delim = "\t",
                            escape_double = FALSE,
                            trim_ws = TRUE)

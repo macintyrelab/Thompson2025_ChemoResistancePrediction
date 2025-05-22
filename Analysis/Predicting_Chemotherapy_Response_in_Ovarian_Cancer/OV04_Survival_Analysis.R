@@ -26,8 +26,8 @@ dir.create(tabs_dir, showWarnings = FALSE, recursive = TRUE)
 ## Files
 # IDs of samples
 id_mapping <- read_csv(file.path(input_dir, 'paclitaxel_IDmapping.csv'))
-patient_info <- read_csv(file.path(input_dir, 'patient_info.csv'))
-id_mapping <- rbind(patient_info %>% select(OV04_ID=`patient_id...1`, samplename=primary_sample), id_mapping)
+patient_info <- read.table(file.path(input_dir, 'patient_info.tsv'),sep = '\t', header = TRUE)
+id_mapping <- rbind(patient_info %>% select(OV04_ID=patient_id, samplename=primary_sample), id_mapping)
 
 # Copy number profiles => used to compute wgii & signatures
 old_cohort_copynumbers <- readRDS(file.path(input_dir, 'downsampled_41_OV04_absolute_copyNumbers.rds'))

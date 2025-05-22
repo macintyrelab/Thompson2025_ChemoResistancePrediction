@@ -1,6 +1,10 @@
 
 # This script is for performing phaseII and phaseII clinical trials in the 
 # different TCGA and HMF cohorts with statistical power.
+# Input files from HMF need to be requested: https://hartwigmedical.github.io/documentation/data-access-request-guide.html
+# Input files from TCGA are publicly available
+# Once downloaded, all input files should be included in the Input_Data folder
+# We have added intermediate files to be able to run the survival analyses without the need of having access to HMF raw data
 
 # Clean environment
 freshr::freshr()
@@ -44,13 +48,13 @@ source(file.path(scripts_dir, 'power_calc.R'))
 
 #### PROCESS INPUT DATA ####
 # HMF
-hmf_clin <- readRDS(paste0(input_dir,'/HMF_clinical_data.RDS'))
-metadata <- read_delim(paste0(input_dir,'/metadata.tsv'),
+hmf_clin <- readRDS(paste0(input_dir,'/HMF_clinical_data.RDS')) #output of "Curating_HMF_Clinical_Data.R"
+metadata <- read_delim(paste0(input_dir,'/metadata.tsv'), #downloaded from HMF
                        delim = "\t",
                        escape_double = FALSE,
                        trim_ws = TRUE)
 metadata$patientIdentifier <- gsub('TI*V*$', '', metadata$sampleId, perl=TRUE)
-hmf_segments <- readRDS(file.path(input_dir, 'hmf_cnp_smooth.rds'))
+hmf_segments <- readRDS(file.path(input_dir, 'hmf_cnp_smooth.rds')) #downloaded from HMF
 tcga_segments_nocin <- readRDS(file.path(input_dir, '0_TCGA_Segments_noCIN.rds'))
 tcga_segments <- readRDS(file.path(input_dir, '0_TCGA_Segments_dCIN.rds'))
 
@@ -72,6 +76,7 @@ wgii_hmf <- hmf_segments %>% mutate(length=end-start) %>% filter(segVal!=2) %>% 
 wgii_hmf$wgii[wgii_hmf$wgii > 1] <- 1
 colnames(wgii_hmf)[1] <- 'sampleId'
 wgii_hmf$wgii <- wgii_hmf$wgii * 100
+saveRDS(wgii_hmf,file.path(input_dir, 'hmf_wgii.rds'))
 
 tcga_segments <- rbind(tcga_segments, tcga_segments_nocin)
 wgii_tcga <- tcga_segments %>% mutate(length=end-start) %>% filter(segVal!=2) %>% group_by(sample) %>% summarise(wgii=sum(length/3e9))
@@ -96,7 +101,7 @@ Power_sen_df <- data.frame(cohort=c(),
 
 chemos <- c('platinum', 'taxane', 'doxorubicin')
 
-# HMF
+# HMF => to get power calculations from HMF the raw data needs to be downloaded
 hmf_cohorts <- unique(hmf_clin$cancer_type)
 hmf_cohorts <- hmf_cohorts[-c(13,36)]
 
@@ -273,7 +278,7 @@ Power_p2_df <- data.frame(cohort=c(),
 
 chemos <- c('platinum', 'taxane', 'doxorubicin')
 
-# HMF
+# HMF => to get power calculations from HMF the raw data needs to be downloaded
 hmf_cohorts <- unique(hmf_clin$cancer_type)
 hmf_cohorts <- hmf_cohorts[-c(13,36)]
 
@@ -364,7 +369,7 @@ write.table(x = Power_p2_df,
 # For Sarcoma we don't have the numbers to run a phase III analysis given the standard clinical treatment
 # pathways.
 
-# TCGA-OV Platinum => we are powered for 1st line
+## TCGA-OV Platinum => we are powered for 1st line
 tcga_ov_plat_p2 <- phase_2_func('OV', 'platinum', 'tcga-ov')
 tcga_ov_plat_p2 <- left_join(tcga_ov_plat_p2, wgii_tcga)
 tcga_ov_plat_p2$`Tumor Stage` <-  gsub('[ABC]', '', tcga_ov_plat_p2$`Tumor Stage`)
@@ -379,7 +384,7 @@ render_graph(phase_2_plot_func('OV', 'platinum', 'tcga')) %>%
   charToRaw %>%
   rsvg_pdf(file.path(supp_figs_flow_dir, 'TCGA_OV_Plat_filtering_phase_2.pdf'))
 
-# TCGA-SARC Dox => we are powered for phase II
+## TCGA-SARC Dox => we are powered for phase II
 tcga_sarc_dox_p2 <- phase_2_func('SARC', 'doxorubicin', 'tcga')
 tcga_sarc_dox_p2 <- left_join(tcga_sarc_dox_p2 %>% select(-wgii), wgii_tcga)
 tcga_sarc_dox_p2$wgii[is.na(tcga_sarc_dox_p2$wgii)]=0 #all segments are diploid in TCGA-MO-A47P
@@ -398,7 +403,7 @@ render_graph(phase_2_plot_func('SARC', 'doxorubicin', 'tcga')) %>%
   rsvg_pdf(file.path(supp_figs_flow_dir, 'TCGA_SARC_Dox_filtering_phase_2.pdf'))
 
 
-# TCGA-BRCA TNBC Taxane => we have not power for phase II
+## TCGA-BRCA TNBC Taxane => we have not power for phase II
 brca_comb_tax_p2 <- phase_2_func('BRCA', 'taxane', 'tcga', SA_exp = FALSE)
 brca_comb_tax_p2 <- brca_comb_tax_p2[brca_comb_tax_p2$type=="TNBC"|brca_comb_tax_p2$type=="Other",]
 powered_hr <- power_calc_inv(P=mean(brca_comb_tax_p2$censoring), Rsquared=0.05,
@@ -408,8 +413,9 @@ required_size <- ceiling(power_calc(P=mean(brca_comb_tax_p2$censoring), Rsquared
                                     pred_prop=table(brca_comb_tax_p2$prediction)[2]/nrow(brca_comb_tax_p2),
                                     hr=5.5))
 
-# HMF Colorectum Platinum => we have not power for phase II (unbalanced data)
-col_comb_plat_p2 <- phase_2_func('Colorectum', 'platinum', 'hmf')
+## HMF Colorectum Platinum => we have not power for phase II (unbalanced data)
+# col_comb_plat_p2 <- phase_2_func('Colorectum', 'platinum', 'hmf') # hmf raw data needed to generate the input table
+col_comb_plat_p2 <- readRDS(file.path(input_dir,'hmf_col_comb_plat_p2.rds'))
 powered_hr <- power_calc_inv(P=mean(col_comb_plat_p2$censoring), Rsquared=0.05,
                              pred_prop=table(col_comb_plat_p2$prediction)[2]/nrow(col_comb_plat_p2),
                              d=nrow(col_comb_plat_p2))[2]
@@ -418,8 +424,9 @@ required_size <- ceiling(power_calc(P=mean(col_comb_plat_p2$censoring), Rsquared
                                     hr=3))
 
 
-# HMF Lung taxane => we have not power for phase II 
-lung_comb_tax_p2 <- phase_2_func('Lung', 'taxane', 'hmf')
+## HMF Lung taxane => we have not power for phase II 
+# lung_comb_tax_p2 <- phase_2_func('Lung', 'taxane', 'hmf') # hmf raw data needed to generate the input table
+lung_comb_tax_p2 <- readRDS(file.path(input_dir,'hmf_lung_comb_tax_p2.rds'))
 powered_hr <- power_calc_inv(P=mean(lung_comb_tax_p2$censoring), Rsquared=0.05,
                              pred_prop=table(lung_comb_tax_p2$prediction)[2]/nrow(lung_comb_tax_p2),
                              d=nrow(lung_comb_tax_p2))[2]
@@ -431,7 +438,7 @@ required_size <- ceiling(power_calc(P=mean(col_comb_plat_p2$censoring), Rsquared
 #### PHASE III #################################################################
 
 ##### PRIMARY TUMOUR COMBINATION #####
-# TCGA-OV Taxane
+## TCGA-OV Taxane
 ov_comb_tax_p3 <- phase_3_func('OV', 'taxane', 'tcga-ov', SA_exp=FALSE, SA_control=FALSE)
 ov_comb_tax_p3_res <- ov_comb_tax_p3[[1]]
 ov_comb_tax_p3_res$treatment_line <- as.numeric(substr(ov_comb_tax_p3_res$treatment_line, 1, 1))
@@ -487,9 +494,8 @@ render_graph(phase_3_plot_func('OV', 'taxane', 'tcga-ov', SA_exp=FALSE, SA_contr
   rsvg_pdf(file.path(supp_figs_flow_dir, 'TCGA_OV_Comb_Tax_filtering_phase_3.pdf'))
 
 
-# TCGA-OV Doxorubicin
+## TCGA-OV Doxorubicin
 ov_comb_dox_p3 <- phase_3_func('OV', 'doxorubicin', 'tcga-ov', SA_exp=FALSE, SA_control=FALSE)
-saveRDS(ov_comb_dox_p3,file.path(figs_dir, 'TCGA_OV_Doxo_phase_3.rds'))
 ov_comb_dox_p3_res <- ov_comb_dox_p3[[1]]
 ov_comb_dox_p3_res <- left_join(ov_comb_dox_p3_res, wgii_tcga)
 ov_comb_dox_p3_res$`Tumor Stage` <- gsub('[ABC]', '', ov_comb_dox_p3_res$`Tumor Stage`)
@@ -550,7 +556,7 @@ render_graph(phase_3_plot_func('OV', 'doxorubicin', 'tcga-ov', SA_exp=FALSE, SA_
 
 
 ##### PRIMARY TUMOUR SINGLE-AGENT #####
-# TCGA-OV Taxane
+## TCGA-OV Taxane
 ov_sa_tax_p3 <- phase_3_func('OV', 'taxane', 'tcga-ov', SA_exp=TRUE, SA_control=FALSE)
 ov_sa_tax_p3_res <- ov_sa_tax_p3[[1]]
 ov_sa_tax_p3_res$treatment_line <- as.numeric(substr(ov_sa_tax_p3_res$treatment_line, 1, 1))
@@ -600,7 +606,7 @@ cox.zph(ov_sa_tax_p3_sen_cox) #all ok!
 
 
 
-# TCGA-OV Doxorubicin
+## TCGA-OV Doxorubicin
 ov_sa_dox_p3 <- phase_3_func('OV', 'doxorubicin', 'tcga-ov', SA_exp=TRUE, SA_control=FALSE)
 ov_sa_dox_p3_res <- ov_sa_dox_p3[[1]]
 ov_sa_dox_p3_res <- left_join(ov_sa_dox_p3_res, wgii_tcga)
@@ -657,10 +663,13 @@ cox.zph(ov_sa_dox_p3_sen_cox) #all ok!
 
 
 ##### METASTATIC TUMOUR COMBINATION THERAPY #####
+wgii_hmf=readRDS(file.path(input_dir, 'hmf_wgii.rds'))
 
-# HMF prostate Taxane
-pro_comb_tax_p3 <- phase_3_func('Prostate', 'taxane', 'hmf', SA_exp=FALSE, SA_control=FALSE)
+## HMF prostate Taxane
+# pro_comb_tax_p3 <- phase_3_func('Prostate', 'taxane', 'hmf', SA_exp=FALSE, SA_control=FALSE) # hmf raw data needed to generate the input table
+pro_comb_tax_p3 <- readRDS(file.path(input_dir,'hmf_pro_comb_tax_p3.rds'))
 pro_comb_tax_p3_res <- pro_comb_tax_p3[[1]]
+# pro_comb_tax_p3_res$biopsyYear <- as.numeric(substr(pro_comb_tax_p3_res$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 pro_comb_tax_p3_res <- left_join(pro_comb_tax_p3_res, wgii_hmf)
 colnames(pro_comb_tax_p3_res)[colnames(pro_comb_tax_p3_res)=='Exp_treatment'] <- 'Treatment arm'
 pro_comb_tax_p3_res$`Treatment arm` <- ifelse(pro_comb_tax_p3_res$`Treatment arm`, 'Experimental', 'Control')
@@ -668,7 +677,7 @@ colnames(pro_comb_tax_p3_res)[colnames(pro_comb_tax_p3_res)=='age'] <- 'Age at d
 pro_comb_tax_p3_res$age_recoded <- as.character(car::recode(as.numeric(pro_comb_tax_p3_res$'Age at diagnosis'), "lo:69=1; 70:hi=2"))
 colnames(pro_comb_tax_p3_res)[colnames(pro_comb_tax_p3_res)=='treatment_line'] <- 'Treatment line'
 colnames(pro_comb_tax_p3_res)[colnames(pro_comb_tax_p3_res)=='wgii'] <- 'wGII'
-pro_comb_tax_p3_res$biopsyYear <- as.numeric(substr(pro_comb_tax_p3_res$biopsyDate, 1, 4))
+
 pro_comb_tax_p3_res_weights <- weightit(`Treatment arm` ~ biopsyYear,
                                         data=pro_comb_tax_p3_res,
                                         method='glm',
@@ -679,6 +688,7 @@ pro_comb_tax_p3_res_cox <- coxph(Surv(TTF, censoring) ~ `Treatment arm` + `Age a
 cox.zph(pro_comb_tax_p3_res_cox) #all ok!
 
 pro_comb_tax_p3_sen <- pro_comb_tax_p3[[2]]
+# pro_comb_tax_p3_sen$biopsyYear <- as.numeric(substr(pro_comb_tax_p3_sen$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 pro_comb_tax_p3_sen <- left_join(pro_comb_tax_p3_sen, wgii_hmf)
 colnames(pro_comb_tax_p3_sen)[colnames(pro_comb_tax_p3_sen)=='Exp_treatment'] <- 'Treatment arm'
 pro_comb_tax_p3_sen$`Treatment arm` <- ifelse(pro_comb_tax_p3_sen$`Treatment arm`, 'Experimental', 'Control')
@@ -686,7 +696,7 @@ colnames(pro_comb_tax_p3_sen)[colnames(pro_comb_tax_p3_sen)=='age'] <- 'Age at d
 pro_comb_tax_p3_sen$age_recoded <- as.character(car::recode(as.numeric(pro_comb_tax_p3_sen$'Age at diagnosis'), "lo:54=1; 55:hi=2"))
 colnames(pro_comb_tax_p3_sen)[colnames(pro_comb_tax_p3_sen)=='treatment_line'] <- 'Treatment line'
 colnames(pro_comb_tax_p3_sen)[colnames(pro_comb_tax_p3_sen)=='wgii'] <- 'wGII'
-pro_comb_tax_p3_sen$biopsyYear <- as.numeric(substr(pro_comb_tax_p3_sen$biopsyDate, 1, 4))
+
 pro_comb_tax_p3_sen_weights <- weightit(`Treatment arm` ~ biopsyYear,
                                         data=pro_comb_tax_p3_sen,
                                         method='glm',
@@ -696,15 +706,18 @@ bal.tab(pro_comb_tax_p3_sen_weights,
 pro_comb_tax_p3_sen_cox <- coxph(Surv(TTF, censoring) ~ `Treatment arm` + `Age at diagnosis`, data=pro_comb_tax_p3_sen, weights=pro_comb_tax_p3_sen_weights$weights)
 cox.zph(pro_comb_tax_p3_sen_cox) #global!
 
+# render plots are available in figshare & input data is needed for generating them
 render_graph(phase_3_plot_func('Prostate', 'taxane', 'hmf', SA_exp=FALSE, SA_control=FALSE)) %>%
   export_svg %>%
   charToRaw %>%
   rsvg_pdf(file.path(supp_figs_flow_dir, 'HMF_Prostate_Comb_Tax_filtering_phase_3.pdf'))
 
 
-# HMF breast Taxane
-bre_comb_tax_p3 <- phase_3_func('Breast', 'taxane', 'hmf', SA_exp=FALSE, SA_control=FALSE, control_pattern='citabine')
+## HMF breast Taxane
+# bre_comb_tax_p3 <- phase_3_func('Breast', 'taxane', 'hmf', SA_exp=FALSE, SA_control=FALSE, control_pattern='citabine') # hmf raw data needed to generate the input table
+bre_comb_tax_p3 <- readRDS(file.path(input_dir,'hmf_bre_comb_tax_p3.rds'))
 bre_comb_tax_p3_res <- bre_comb_tax_p3[[1]]
+# bre_comb_tax_p3_res$biopsyYear <- as.numeric(substr(bre_comb_tax_p3_res$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 bre_comb_tax_p3_res <- bre_comb_tax_p3_res %>% filter(name!='Eftilagimod alpha or placebo/Paclitaxel')
 bre_comb_tax_p3_res <- left_join(bre_comb_tax_p3_res, wgii_hmf)
 colnames(bre_comb_tax_p3_res)[colnames(bre_comb_tax_p3_res)=='Exp_treatment'] <- 'Treatment arm'
@@ -716,7 +729,6 @@ bre_comb_tax_p3_res$`Tumour subtype` <- gsub('-negative', '-', gsub('-positive',
 bre_comb_tax_p3_res$`Tumour subtype`[bre_comb_tax_p3_res$`Tumour subtype`=='Triple negative'] <- 'TNBC'
 colnames(bre_comb_tax_p3_res)[colnames(bre_comb_tax_p3_res)=='treatment_line'] <- 'Treatment line'
 colnames(bre_comb_tax_p3_res)[colnames(bre_comb_tax_p3_res)=='wgii'] <- 'wGII'
-bre_comb_tax_p3_res$biopsyYear <- as.numeric(substr(bre_comb_tax_p3_res$biopsyDate, 1, 4))
 bre_comb_tax_p3_res_weights <- weightit(`Treatment arm` ~ biopsyYear,
                                         data=bre_comb_tax_p3_res,
                                         method='glm',
@@ -727,6 +739,7 @@ bre_comb_tax_p3_res_cox <- coxph(Surv(TTF, censoring) ~ `Treatment arm` + `Age a
 cox.zph(bre_comb_tax_p3_res_cox) #all ok!
 
 bre_comb_tax_p3_sen <- bre_comb_tax_p3[[2]]
+# bre_comb_tax_p3_sen$biopsyYear <- as.numeric(substr(bre_comb_tax_p3_sen$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 bre_comb_tax_p3_sen <- bre_comb_tax_p3_sen %>% filter(name!='Mucopolysaccharidosis I (MPS I) inhibitor/Paclitaxel' & name!='Carboplatin/Gemcitabine/Paclitaxel')
 bre_comb_tax_p3_sen <- left_join(bre_comb_tax_p3_sen, wgii_hmf)
 colnames(bre_comb_tax_p3_sen)[colnames(bre_comb_tax_p3_sen)=='Exp_treatment'] <- 'Treatment arm'
@@ -738,7 +751,6 @@ bre_comb_tax_p3_sen$`Tumour subtype` <- gsub('-negative', '-', gsub('-positive',
 bre_comb_tax_p3_sen$`Tumour subtype`[bre_comb_tax_p3_sen$`Tumour subtype`=='Triple negative'] <- 'TNBC'
 colnames(bre_comb_tax_p3_sen)[colnames(bre_comb_tax_p3_sen)=='treatment_line'] <- 'Treatment line'
 colnames(bre_comb_tax_p3_sen)[colnames(bre_comb_tax_p3_sen)=='wgii'] <- 'wGII'
-bre_comb_tax_p3_sen$biopsyYear <- as.numeric(substr(bre_comb_tax_p3_sen$biopsyDate, 1, 4))
 bre_comb_tax_p3_sen_weights <- weightit(`Treatment arm` ~ biopsyYear,
                                         data=bre_comb_tax_p3_sen,
                                         method='glm',
@@ -748,15 +760,18 @@ bal.tab(bre_comb_tax_p3_sen_weights,
 bre_comb_tax_p3_sen_cox <- coxph(Surv(TTF, censoring) ~ `Treatment arm` + `Age at diagnosis`, data=bre_comb_tax_p3_sen, weights=bre_comb_tax_p3_sen_weights$weights)
 cox.zph(bre_comb_tax_p3_sen_cox) #all ok!
 
+# render plots are available in figshare & input data is needed for generating them
 render_graph(phase_3_plot_func('Breast', 'taxane', 'hmf', SA_exp=FALSE, SA_control=FALSE, control_pattern='citabine')) %>%
   export_svg %>%
   charToRaw %>%
   rsvg_pdf(file.path(supp_figs_flow_dir, 'HMF_Breast_Comb_Tax_filtering_phase_3.pdf'))
 
 
-# HMF breast Doxo
-bre_comb_dox_p3 <- phase_3_func('Breast', 'doxorubicin', 'hmf', SA_exp=FALSE, SA_control=FALSE, control_pattern='citabine')
+## HMF breast Doxo
+# bre_comb_dox_p3 <- phase_3_func('Breast', 'doxorubicin', 'hmf', SA_exp=FALSE, SA_control=FALSE, control_pattern='citabine') # hmf raw data needed to generate the input table
+bre_comb_dox_p3 <- readRDS(file.path(input_dir,'hmf_bre_comb_dox_p3.rds'))
 bre_comb_dox_p3_res <- bre_comb_dox_p3[[1]]
+# bre_comb_dox_p3_res$biopsyYear <- as.numeric(substr(bre_comb_dox_p3_res$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 bre_comb_dox_p3_res <- bre_comb_dox_p3_res %>% filter(name!='Eftilagimod alpha or placebo/Paclitaxel')
 bre_comb_dox_p3_res <- left_join(bre_comb_dox_p3_res, wgii_hmf)
 colnames(bre_comb_dox_p3_res)[colnames(bre_comb_dox_p3_res)=='Exp_treatment'] <- 'Treatment arm'
@@ -768,7 +783,6 @@ bre_comb_dox_p3_res$`Tumour subtype` <- gsub('-negative', '-', gsub('-positive',
 bre_comb_dox_p3_res$`Tumour subtype`[bre_comb_dox_p3_res$`Tumour subtype`=='Triple negative'] <- 'TNBC'
 colnames(bre_comb_dox_p3_res)[colnames(bre_comb_dox_p3_res)=='treatment_line'] <- 'Treatment line'
 colnames(bre_comb_dox_p3_res)[colnames(bre_comb_dox_p3_res)=='wgii'] <- 'wGII'
-bre_comb_dox_p3_res$biopsyYear <- as.numeric(substr(bre_comb_dox_p3_res$biopsyDate, 1, 4))
 bre_comb_dox_p3_res_weights <- weightit(`Treatment arm` ~ biopsyYear,
                                         data=bre_comb_dox_p3_res,
                                         method='glm',
@@ -779,6 +793,7 @@ bre_comb_dox_p3_res_cox <- coxph(Surv(TTF, censoring) ~ `Treatment arm` + `Age a
 cox.zph(bre_comb_dox_p3_res_cox) #all ok!
 
 bre_comb_dox_p3_sen <- bre_comb_dox_p3[[2]]
+# bre_comb_dox_p3_sen$biopsyYear <- as.numeric(substr(bre_comb_dox_p3_sen$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 bre_comb_dox_p3_sen <- bre_comb_dox_p3_sen %>% filter(name!='Eftilagimod alpha or placebo/Paclitaxel')
 bre_comb_dox_p3_sen <- left_join(bre_comb_dox_p3_sen, wgii_hmf)
 colnames(bre_comb_dox_p3_sen)[colnames(bre_comb_dox_p3_sen)=='Exp_treatment'] <- 'Treatment arm'
@@ -799,19 +814,22 @@ bal.tab(bre_comb_dox_p3_sen_weights,
 bre_comb_dox_p3_sen_cox <- coxph(Surv(TTF, censoring) ~ `Treatment arm` + `Age at diagnosis` + wGII, data=bre_comb_dox_p3_sen, weights=bre_comb_dox_p3_sen_weights$weights)
 cox.zph(bre_comb_dox_p3_sen_cox) #all ok!
 
+# render plots are available in figshare & input data is needed for generating them
 render_graph(phase_3_plot_func('Breast', 'doxorubicin', 'hmf', SA_exp=FALSE, SA_control=FALSE, control_pattern='citabine')) %>%
   export_svg %>%
   charToRaw %>%
   rsvg_pdf(file.path(supp_figs_flow_dir, 'HMF_Breast_Comb_Anth_filtering_phase_3.pdf'))
 
 
-# HMF ovary Doxo => we are not powered when platinum is excluded in the experimental and control arm (following the same than in TCGA)
-ovary_comb_dox_p3 <- phase_3_func('Ovary', 'doxorubicin', 'hmf', SA_exp=FALSE, SA_control=FALSE)
+## HMF ovary Doxo => we are not powered when platinum is excluded in the experimental and control arm (following the same than in TCGA)
+# ovary_comb_dox_p3 <- phase_3_func('Ovary', 'doxorubicin', 'hmf', SA_exp=FALSE, SA_control=FALSE) # hmf raw data needed to generate the input table
+ovary_comb_dox_p3 <- readRDS(file.path(input_dir,'hmf_ovary_comb_dox_p3.rds'))
 ovary_comb_dox_p3_res <- ovary_comb_dox_p3[[1]]
 ovary_comb_dox_p3_res <- ovary_comb_dox_p3_res %>% filter(!grepl('platin', name))
 
-# TCGA UCEC Doxo => there are only 8 patients treated with dox and the model is not proportional => excluded
-ucec_comb_dox_p3 <- phase_3_func('UCEC', 'doxorubicin', 'tcga', SA_exp=FALSE, SA_control=FALSE)
+## TCGA UCEC Doxo => there are only 8 patients treated with dox and the model is not proportional => excluded
+ucec_comb_dox_p3 <- phase_3_func('UCEC', 'doxorubicin', 'tcga', SA_exp=FALSE, SA_control=FALSE) # hmf raw data needed to generate the input table
+ucec_comb_dox_p3 <- readRDS(file.path(input_dir,'hmf_ucec_comb_dox_p3.rds'))
 ucec_comb_dox_p3_res <- ucec_comb_dox_p3[[1]]
 ucec_comb_dox_p3_res <- left_join(ucec_comb_dox_p3_res, wgii_hmf)
 colnames(ucec_comb_dox_p3_res)[colnames(ucec_comb_dox_p3_res)=='Exp_treatment'] <- 'Treatment arm'
@@ -822,9 +840,11 @@ cox.zph(ucec_comb_dox_p3_res_cox) #not proportional! not good representation of 
 
 
 ##### METASTATIC SINGLE-AGENT #####
-# HMF prostate Taxane
-pro_sa_tax_p3 <- phase_3_func('Prostate', 'taxane', 'hmf', SA_exp=TRUE, SA_control=FALSE)
+## HMF prostate Taxane
+# pro_sa_tax_p3 <- phase_3_func('Prostate', 'taxane', 'hmf', SA_exp=TRUE, SA_control=FALSE) # hmf raw data needed to generate the input table
+pro_sa_tax_p3 <- readRDS(file.path(input_dir,'hmf_pro_sa_tax_p3.rds'))
 pro_sa_tax_p3_res <- pro_sa_tax_p3[[1]]
+# pro_sa_tax_p3_res$biopsyYear <- as.numeric(substr(pro_sa_tax_p3_res$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 pro_sa_tax_p3_res <- left_join(pro_sa_tax_p3_res, wgii_hmf)
 colnames(pro_sa_tax_p3_res)[colnames(pro_sa_tax_p3_res)=='Exp_treatment'] <- 'Treatment arm'
 pro_sa_tax_p3_res$`Treatment arm` <- ifelse(pro_sa_tax_p3_res$`Treatment arm`, 'Experimental', 'Control')
@@ -842,6 +862,7 @@ pro_sa_tax_p3_res_cox <- coxph(Surv(TTF, censoring) ~ `Treatment arm` + `Age at 
 cox.zph(pro_sa_tax_p3_res_cox) #all ok!
 
 pro_sa_tax_p3_sen <- pro_sa_tax_p3[[2]]
+# pro_sa_tax_p3_sen$biopsyYear <- as.numeric(substr(pro_sa_tax_p3_sen$biopsyDate, 1, 4)) # this needs to be run if starting from raw data
 pro_sa_tax_p3_sen <- left_join(pro_sa_tax_p3_sen, wgii_hmf)
 colnames(pro_sa_tax_p3_sen)[colnames(pro_sa_tax_p3_sen)=='Exp_treatment'] <- 'Treatment arm'
 pro_sa_tax_p3_sen$`Treatment arm` <- ifelse(pro_sa_tax_p3_sen$`Treatment arm`, 'Experimental', 'Control')

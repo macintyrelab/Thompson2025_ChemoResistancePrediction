@@ -30,10 +30,12 @@ source(file.path(scripts_dir, 'power_calc.R'))
 
 ################################################################################
 
-# #### PROCESS INPUT DATA ####
-# # HMF
-hmf_clin <- readRDS(paste0(input_dir,'/HMF_clinical_data.RDS'))
-metadata <- read_delim(paste0(input_dir,'/metadata.tsv'),
+#### PROCESS INPUT DATA ####
+## HMF
+# Data needs to be requested in HMF: https://hartwigmedical.github.io/documentation/data-access-request-guide.html
+# Once downloaded, hmf files should be included in the Input_Data folder
+hmf_clin <- readRDS(paste0(input_dir,'/HMF_clinical_data.RDS')) #output of "Curating_HMF_Clinical_Data.R"
+metadata <- read_delim(paste0(input_dir,'/metadata.tsv'), #downloaded from HMF
                        delim = "\t",
                        escape_double = FALSE,
                        trim_ws = TRUE)

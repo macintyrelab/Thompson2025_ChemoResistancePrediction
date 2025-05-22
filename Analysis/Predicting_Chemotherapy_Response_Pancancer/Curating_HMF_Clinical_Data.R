@@ -1,4 +1,7 @@
 # This script is for generating the curated HMF clinical history file 'HMF_clinical_history.RDS'
+# Input files need to be requested in HMF: https://hartwigmedical.github.io/documentation/data-access-request-guide.html
+# Once downloaded, hmf files should be included in the Input_Data folder
+
 
 # Clean environment
 freshr::freshr()
@@ -144,5 +147,4 @@ for(i in unique(combined_drugs_TTF$patientIdentifier)){
     combined_drugs_TTF$biopsyState[combined_drugs_indexes[biopsy_dates]] <- 'Biopsy'
   }
 }
-
 saveRDS(combined_drugs_TTF, file.path(input_dir, 'HMF_clinical_data.RDS'))

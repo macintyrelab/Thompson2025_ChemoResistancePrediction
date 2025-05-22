@@ -4,7 +4,7 @@ This repo holds the code and data needed to reproduce the analysis for *Predicti
 
 ## Data
 
-All data for reproducing analyses and figures can be downloaded from [figshare](https://figshare.com/s/09bbc25f748991a248a6). Once downloaded, please add all of them in a folder named as `Input_Data` at the root of the repo to ensure smooth execution of the code.
+All data for reproducing analyses and figures can be downloaded from [figshare](https://doi.org/10.6084/m9.figshare.27210297). Once downloaded, please add all of them in a folder named as `Input_Data` at the root of the repo to ensure smooth execution of the code.
 
 ## Linking code to manuscript figures (main, extended and supplement)
 
@@ -46,7 +46,7 @@ All the code is in the `Analysis` folder, which contains 8 directories which we 
 
 -   [Predicting_Response_Using_Liquid_Biopsy](https://github.com/macintyrelab/ChemoResistantPredictionCIN/tree/main/Analysis/Predicting_Response_Using_Liquid_Biopsy): This repository contains code to reproduce the clinical utility of our biomarkers by using liquid biopsies (Figure 5c-d, Supplementary Figure 23, Extended Data Table 3)
 
--   [Helper_Scripts](https://github.com/macintyrelab/ChemoResistantPredictionCIN/tree/main/Analysis/Helper_Scripts): This repository contains all functions needed for running all scripts
+-   [Helper_Scripts](https://github.com/macintyrelab/ChemoResistantPredictionCIN/tree/main/Analysis/Helper_Scripts): This repository contains all functions needed for running all scripts. It also contains scripts and data needed to quantify CX signatures from copy number profiles. 
 
 ## Contact
 If you experience any issues or have questions about the code, please open a Github issue with a minimum reproducible example. For questions around collaborations or sensitive patient data, please contact us directly at Geoff Macintyre gmacintyre@cnio.es or Anna M. Piskorz anna.piskorz@cruk.cam.ac.uk.
